@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NATO Phonetic Trainer</title>
+  <style>
+    body { font-family: sans-serif; padding: 1em; }
+    .hidden { display: none; }
+    .result { margin-top: 1em; font-weight: bold; }
+    input { padding: 0.5em; }
+    button { margin: 0.5em 0; padding: 0.5em 1em; }
+    .correct { color: green; }
+    .wrong { color: red; }
+    #hint { margin-top: 1em; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/annyang/2.6.1/annyang.min.js"></script>
+</head>
+<body>
+  <h1>NATO Phonetic Alphabet Trainer</h1>
+
+  <div id="listen">
+    <h2>Listening Mode</h2>
+    <p>Type the word you heard:</p>
+    <input id="listenInput" />
+    <button onclick="checkListeningAnswer()">Submit</button>
+    <button onclick="startListeningMode()">Next Word</button>
+    <button onclick="speakWord()">Replay Word</button>
+    <label>Speaking speed: <input type="range" id="rateSlider" min="0.5" max="2" step="0.1" value="1" /></label>
+    <br>
+    <p id="listenResult" class="result"></p>
+  </div>
+
+  <div id="speak">
+    <h2>Speaking Mode</h2>
+    <p>Spell this word using NATO alphabet: <b id="speakWord"></b></p>
+    <button onclick="startSpeechRecognition()">Start Speaking</button>
+    <button onclick="startSpeakingMode()">Next Word</button>
+    <p id="speakResult" class="result"></p>
+    <p id="recognized"></p>
+  </div>
+
+  <button onclick="toggleHint()">Toggle alphabet</button>
+  <div id="hint" class="hidden"></div>
+
+  <script>
+    const natoAlphabet = {
+      A: "Alpha", B: "Bravo", C: "Charlie", D: "Delta", E: "Echo", F: "Foxtrot",
+      G: "Golf", H: "Hotel", I: "India", J: "Juliett", K: "Kilo", L: "Lima",
+      M: "Mike", N: "November", O: "Oscar", P: "Papa", Q: "Quebec", R: "Romeo",
+      S: "Sierra", T: "Tango", U: "Uniform", V: "Victor", W: "Whiskey",
+      X: "X-ray", Y: "Yankee", Z: "Zulu"
+    };
+
+    let dictionary = [];
+    let currentWord = "";
+    let currentUtterance = null;
+
+    async function loadDictionary() {
+      try {
+        const response = await fetch("https://raw.githubusercontent.com/dwyl/english-words/master/words_alpha.txt");
+        const text = await response.text();
+        dictionary = text
+          .split("\n")
+          .map(w => w.trim().toUpperCase())
+          .filter(w => w.length >= 4 && w.length <= 8);
+      } catch (err) {
+        alert("Failed to load dictionary. Check network or CORS settings.");
+      }
+    }
+
+    function getRandomWord() {
+      return dictionary[Math.floor(Math.random() * dictionary.length)];
+    }
+
+    function startListeningMode() {
+      if (dictionary.length === 0) return;
+      currentWord = getRandomWord();
+      document.getElementById("listenInput").value = "";
+      document.getElementById("listenResult").textContent = "";
+      speakWord();
+    }
+
+    function speakWord() {
+      document.getElementById("listenInput").focus();
+
+      const rate = parseFloat(document.getElementById("rateSlider").value);
+      const spoken = currentWord.split("").map(ch => natoAlphabet[ch] || ch).join(" ");
+      currentUtterance = new SpeechSynthesisUtterance(spoken);
+      currentUtterance.rate = rate;
+      speechSynthesis.speak(currentUtterance);
+    }
+
+    function checkListeningAnswer() {
+      const input = document.getElementById("listenInput").value.toUpperCase();
+      const result = document.getElementById("listenResult");
+      if (input === currentWord) {
+        result.textContent = "Correct";
+        result.className = "result correct";
+      } else {
+        result.textContent = "Wrong. Correct word: " + currentWord;
+        result.className = "result wrong";
+      }
+    }
+
+    function toggleHint() {
+      const hintDiv = document.getElementById("hint");
+      if (hintDiv.classList.contains("hidden")) {
+        hintDiv.classList.remove("hidden");
+        hintDiv.innerHTML = Object.entries(natoAlphabet)
+          .map(([letter, word]) => `<b>${letter}</b>: ${word}`)
+          .join("<br>");
+      } else {
+        hintDiv.classList.add("hidden");
+        hintDiv.innerHTML = "";
+      }
+    }
+
+    function startSpeakingMode() {
+      if (dictionary.length === 0) return;
+      currentWord = getRandomWord();
+      document.getElementById("speakWord").textContent = currentWord;
+      document.getElementById("speakResult").textContent = "";
+      document.getElementById("recognized").textContent = "";
+    }
+
+    function startSpeechRecognition() {
+      if (!annyang) {
+        alert("Speech recognition not available.");
+        return;
+      }
+
+      annyang.removeCommands();
+
+      annyang.addCallback('result', function(phrases) {
+        const transcript = phrases[0].toLowerCase();
+        const heard = transcript.split(" ").map(word => {
+          const found = Object.entries(natoAlphabet).find(([letter, nato]) =>
+            nato.toLowerCase() === word
+          );
+          return found ? found[0] : "?";
+        }).join("");
+
+        document.getElementById("recognized").textContent = "Recognized: " + heard;
+        const result = document.getElementById("speakResult");
+        if (heard === currentWord) {
+          result.textContent = "Correct";
+          result.className = "result correct";
+        } else {
+          result.textContent = "Heard: " + heard;
+          result.className = "result wrong";
+        }
+      });
+
+      annyang.start({ autoRestart: false, continuous: false });
+    }
+
+    loadDictionary();
+  </script>
+</body>
+</html>
